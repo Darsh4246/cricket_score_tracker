@@ -1,5 +1,5 @@
-streamlit
-pandas
-sqlite3
-matplotlib
-plotly
+streamlit==1.32.0
+pandas==2.1.4
+sqlite3==2.6.0  
+matplotlib==3.8.2
+plotly==5.18.0
