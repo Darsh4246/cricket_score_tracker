@@ -3,7 +3,6 @@ import pandas as pd
 import sqlite3
 from datetime import datetime
 import matplotlib.pyplot as plt
-import plotly.express as px
 
 # Initialize database
 def init_db():
