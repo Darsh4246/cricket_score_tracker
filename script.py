@@ -4,6 +4,32 @@ import sqlite3
 from datetime import datetime
 import matplotlib.pyplot as plt
 
+def match_setup():
+    # Initialize session state variables if not already initialized
+    if 'batters' not in st.session_state:
+        st.session_state.batters = {}
+
+    if 'bowlers' not in st.session_state:
+        st.session_state.bowlers = {}
+
+    if 'current_batter' not in st.session_state:
+        st.session_state.current_batter = ""
+
+    if 'runner' not in st.session_state:
+        st.session_state.runner = ""
+
+    if 'current_bowler' not in st.session_state:
+        st.session_state.current_bowler = ""
+
+    # Now it's safe to use them
+    for p in [st.session_state.current_batter, st.session_state.runner]:
+        st.session_state.batters[p] = {"runs": 0, "balls": 0, "4s": 0, "6s": 0}
+
+    st.session_state.bowlers[st.session_state.current_bowler] = {
+        "overs": 0, "balls": 0, "runs": 0, "wickets": 0
+    }
+
+    # ... rest of your match setup code ...
 # Initialize database
 def init_db():
     conn = sqlite3.connect('cricket.db')
