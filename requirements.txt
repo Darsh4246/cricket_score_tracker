@@ -1,5 +1,5 @@
-streamlit==1.32.0
-pandas==2.1.4
-sqlite3==2.6.0 
-matplotlib==3.8.2
-plotly==5.18.0
+streamlit==1.35.0  # First official Py3.13-compatible version
+pandas==2.2.1      # Has pre-built wheels for Py3.13
+matplotlib==3.8.4  # Py3.13 compatible
+plotly==5.18.0     # No changes needed
+numpy==1.26.4      # Critical dependency with Py3.13 wheels
