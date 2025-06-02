@@ -5,6 +5,38 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
+def init_session_state():
+    if 'match_started' not in st.session_state:
+        st.session_state.match_started = False
+        st.session_state.overs = 20
+        st.session_state.team1 = "Team A"
+        st.session_state.team2 = "Team B"
+        st.session_state.current_batter = ""
+        st.session_state.runner = ""
+        st.session_state.current_bowler = ""
+        st.session_state.batters = {}
+        st.session_state.bowlers = {}
+        st.session_state.score = 0
+        st.session_state.wickets = 0
+        st.session_state.balls = 0
+        st.session_state.fow = []
+        st.session_state.partnership = 0
+        st.session_state.innings = 1
+        st.session_state.extras = {'wides': 0, 'noballs': 0, 'byes': 0, 'legbyes': 0}
+        st.session_state.free_hit = False
+        st.session_state.last_event = None
+        st.session_state.first_innings_score = 0
+        st.session_state.first_innings_wickets = 0
+        st.session_state.first_innings_balls = 0
+        st.session_state.innings1_batters = {}
+        st.session_state.innings1_bowlers = {}
+        st.session_state.target = 0
+        st.session_state.team_squad = []
+        st.session_state.mom = ""
+
+init_session_state()
+
+
 # Initialize database
 def init_db():
     conn = sqlite3.connect('cricket.db')
