@@ -5,38 +5,6 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-def init_session_state():
-    if 'match_started' not in st.session_state:
-        st.session_state.match_started = False
-        st.session_state.overs = 20
-        st.session_state.team1 = "Team A"
-        st.session_state.team2 = "Team B"
-        st.session_state.current_batter = ""
-        st.session_state.runner = ""
-        st.session_state.current_bowler = ""
-        st.session_state.batters = {}
-        st.session_state.bowlers = {}
-        st.session_state.score = 0
-        st.session_state.wickets = 0
-        st.session_state.balls = 0
-        st.session_state.fow = []
-        st.session_state.partnership = 0
-        st.session_state.innings = 1
-        st.session_state.extras = {'wides': 0, 'noballs': 0, 'byes': 0, 'legbyes': 0}
-        st.session_state.free_hit = False
-        st.session_state.last_event = None
-        st.session_state.first_innings_score = 0
-        st.session_state.first_innings_wickets = 0
-        st.session_state.first_innings_balls = 0
-        st.session_state.innings1_batters = {}
-        st.session_state.innings1_bowlers = {}
-        st.session_state.target = 0
-        st.session_state.team_squad = []
-        st.session_state.mom = ""
-
-init_session_state()
-
-
 # Initialize database
 def init_db():
     conn = sqlite3.connect('cricket.db')
@@ -140,9 +108,12 @@ def determine_winner():
 def init_session_state():
     if 'match_started' not in st.session_state:
         st.session_state.match_started = False
+        st.session_state.match_active = False
         st.session_state.overs = 20
         st.session_state.team1 = "Team A"
         st.session_state.team2 = "Team B"
+        st.session_state.team1_players = []
+        st.session_state.team2_players = []
         st.session_state.current_batter = ""
         st.session_state.runner = ""
         st.session_state.current_bowler = ""
@@ -165,6 +136,8 @@ def init_session_state():
         st.session_state.target = 0
         st.session_state.team_squad = []
         st.session_state.mom = ""
+        st.session_state.show_new_batter_modal = False
+        st.session_state.show_new_bowler_modal = False
 
 
 # Scoring functions
@@ -199,16 +172,23 @@ def add_runs(runs):
 
     check_milestones()
     st.session_state.last_event = str(runs)
+    
+    # Check if over is completed
+    if st.session_state.balls % 6 == 0 and st.session_state.balls > 0:
+        st.session_state.show_new_bowler_modal = True
+        st.rerun()
 
 
 def add_extra(extra_type):
     if extra_type == 'wide':
         st.session_state.score += 1
         st.session_state.extras['wides'] += 1
+        st.session_state.bowlers[st.session_state.current_bowler]['wides'] = st.session_state.bowlers[st.session_state.current_bowler].get('wides', 0) + 1
         st.session_state.last_event = "Wide"
     elif extra_type == 'noball':
         st.session_state.score += 1
         st.session_state.extras['noballs'] += 1
+        st.session_state.bowlers[st.session_state.current_bowler]['noballs'] = st.session_state.bowlers[st.session_state.current_bowler].get('noballs', 0) + 1
         st.session_state.free_hit = True
         st.session_state.last_event = "No Ball + Free Hit"
     elif extra_type == 'byes':
@@ -246,18 +226,9 @@ def add_wicket(method):
     # Reset partnership
     st.session_state.partnership = 0
 
-    # Get new batter
-    available_batters = [p for p in st.session_state.team_squad
-                         if p not in st.session_state.batters or
-                         'out' not in st.session_state.batters[p]]
-
-    if available_batters and st.session_state.wickets < 10:
-        st.session_state.current_batter = available_batters[0]
-        st.session_state.batters[st.session_state.current_batter] = {
-            'runs': 0, 'balls': 0, '4s': 0, '6s': 0
-        }
-    else:
-        end_innings()
+    # Show new batter modal
+    st.session_state.show_new_batter_modal = True
+    st.rerun()
 
 
 # Match management
@@ -292,8 +263,8 @@ def end_innings():
         st.session_state.target = st.session_state.first_innings_score + 1
         st.success(f"🏁 Innings Over! Target is {st.session_state.target}")
 
-        if st.button("Start 2nd Innings"):
-            reset_for_new_innings()
+        # Reset for second innings
+        reset_for_new_innings()
     else:
         # Match complete
         save_match_to_db()
@@ -301,6 +272,7 @@ def end_innings():
         st.balloons()
         st.success("🏁 Match Over!")
         show_match_summary()
+        st.session_state.match_active = False
 
 
 def reset_for_new_innings():
@@ -312,32 +284,26 @@ def reset_for_new_innings():
     st.session_state.partnership = 0
     st.session_state.batters = {}
     st.session_state.bowlers = {}
+    st.session_state.extras = {'wides': 0, 'noballs': 0, 'byes': 0, 'legbyes': 0}
+    st.session_state.free_hit = False
+    st.session_state.last_event = None
 
     # Swap teams
     st.session_state.team1, st.session_state.team2 = st.session_state.team2, st.session_state.team1
-
-    # Get new squad
-    df = load_players()
-    player_names = df["name"].tolist()
+    st.session_state.team1_players, st.session_state.team2_players = st.session_state.team2_players, st.session_state.team1_players
 
     # Setup new innings
-    st.session_state.current_batter = st.selectbox("Striker", player_names, key="striker_select_2")
-    st.session_state.runner = st.selectbox("Non-Striker",
-                                           [p for p in player_names if p != st.session_state.current_batter],
-                                           key="runner_select_2")
-    st.session_state.current_bowler = st.selectbox("Opening Bowler",
-                                                   [p for p in player_names if
-                                                    p not in [st.session_state.current_batter,
-                                                              st.session_state.runner]],
-                                                   key="bowler_select_2")
+    st.session_state.current_batter = st.session_state.team1_players[0]
+    st.session_state.runner = st.session_state.team1_players[1]
+    st.session_state.current_bowler = st.session_state.team2_players[0]
 
     # Initialize batters and bowlers
     for p in [st.session_state.current_batter, st.session_state.runner]:
         st.session_state.batters[p] = {"runs": 0, "balls": 0, "4s": 0, "6s": 0}
-    st.session_state.bowlers[st.session_state.current_bowler] = {"balls": 0, "runs": 0, "wickets": 0}
+    st.session_state.bowlers[st.session_state.current_bowler] = {"balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0}
 
     st.session_state.match_started = True
-    st.experimental_rerun()
+    st.rerun()
 
 
 # Database functions
@@ -348,8 +314,8 @@ def save_match_to_db():
     # Save match header
     c.execute('''INSERT INTO matches 
                  (team1, team2, overs, innings1_score, innings1_wickets, innings1_overs,
-                  innings2_score, innings2_wickets, innings2_overs, winner)
-                 VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                  innings2_score, innings2_wickets, innings2_overs, winner, mom)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
               (st.session_state.team1, st.session_state.team2, st.session_state.overs,
                st.session_state.first_innings_score,
                st.session_state.first_innings_wickets,
@@ -357,7 +323,8 @@ def save_match_to_db():
                st.session_state.score,
                st.session_state.wickets,
                format_overs(st.session_state.balls),
-               determine_winner()))
+               determine_winner(),
+               st.session_state.mom))
 
     match_id = c.lastrowid
 
@@ -388,11 +355,6 @@ def save_match_to_db():
                        stats['runs'], stats['wickets'],
                        stats.get('wides', 0), stats.get('noballs', 0)))
 
-    # Save Man of the Match
-    if 'mom' in st.session_state:
-        c.execute("UPDATE matches SET mom = ? WHERE id = ?",
-                  (st.session_state.mom, match_id))
-
     conn.commit()
     conn.close()
 
@@ -420,7 +382,9 @@ def update_player_stats():
         bowling_stats = {
             'wickets': 0,
             'runs': 0,
-            'balls': 0
+            'balls': 0,
+            'wides': 0,
+            'noballs': 0
         }
 
         for innings in [1, 2]:
@@ -437,6 +401,8 @@ def update_player_stats():
                 bowling_stats['wickets'] += bowlers[player].get('wickets', 0)
                 bowling_stats['runs'] += bowlers[player].get('runs', 0)
                 bowling_stats['balls'] += bowlers[player].get('balls', 0)
+                bowling_stats['wides'] += bowlers[player].get('wides', 0)
+                bowling_stats['noballs'] += bowlers[player].get('noballs', 0)
 
         # Update database
         c.execute('''UPDATE players SET
@@ -512,22 +478,55 @@ def scoring_controls():
     with cols[3]:
         st.markdown("**Match**")
         if st.button("Switch Strike"): switch_strike()
-        if st.button("New Bowler"): change_bowler_ui()
+        if st.button("New Bowler"): 
+            st.session_state.show_new_bowler_modal = True
+            st.rerun()
         if st.button("End Innings"): end_innings()
+        if st.button("Cancel Match", type="secondary"): 
+            st.session_state.match_started = False
+            st.session_state.match_active = False
+            st.rerun()
 
 
-def change_bowler_ui():
-    df = load_players()
-    player_names = df["name"].tolist()
-    available_bowlers = [p for p in player_names
-                         if p not in [st.session_state.current_batter, st.session_state.runner]]
+def show_new_batter_modal():
+    if st.session_state.show_new_batter_modal:
+        with st.container():
+            st.write("### Select New Batter")
+            
+            # Get available players from the batting team
+            available_players = [p for p in (st.session_state.team1_players if st.session_state.innings == 1 else st.session_state.team2_players)
+                             if p not in st.session_state.batters or 'out' not in st.session_state.batters[p]]
+            
+            if available_players and st.session_state.wickets < 10:
+                new_batter = st.selectbox("New Batter", available_players)
+                
+                if st.button("Confirm"):
+                    st.session_state.current_batter = new_batter
+                    st.session_state.batters[new_batter] = {'runs': 0, 'balls': 0, '4s': 0, '6s': 0}
+                    st.session_state.show_new_batter_modal = False
+                    st.rerun()
+            else:
+                end_innings()
 
-    new_bowler = st.selectbox("Select new bowler", available_bowlers)
-    if st.button("Confirm Bowler Change"):
-        st.session_state.current_bowler = new_bowler
-        if new_bowler not in st.session_state.bowlers:
-            st.session_state.bowlers[new_bowler] = {"balls": 0, "runs": 0, "wickets": 0}
-        st.experimental_rerun()
+
+def show_new_bowler_modal():
+    if st.session_state.show_new_bowler_modal:
+        with st.container():
+            st.write("### Select New Bowler")
+            
+            # Get available players from the bowling team
+            available_players = [p for p in (st.session_state.team2_players if st.session_state.innings == 1 else st.session_state.team1_players)
+                             if p not in [st.session_state.current_batter, st.session_state.runner]]
+            
+            if available_players:
+                new_bowler = st.selectbox("New Bowler", available_players)
+                
+                if st.button("Confirm"):
+                    st.session_state.current_bowler = new_bowler
+                    if new_bowler not in st.session_state.bowlers:
+                        st.session_state.bowlers[new_bowler] = {"balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0}
+                    st.session_state.show_new_bowler_modal = False
+                    st.rerun()
 
 
 def show_match_summary():
@@ -552,7 +551,7 @@ def show_match_summary():
     if st.button("Save Match Data"):
         save_match_to_db()  # Save MOM
         st.session_state.match_started = False
-        st.experimental_rerun()
+        st.rerun()
 
 
 def show_detailed_scorecard():
@@ -643,6 +642,10 @@ def player_stats():
     st.title("📊 Player Statistics")
     df = load_players()
 
+    if df.empty:
+        st.warning("No players found. Please add players first.")
+        return
+
     selected_player = st.selectbox("Select player:", sorted(df["name"].values))
     if selected_player:
         player = df[df["name"] == selected_player].iloc[0]
@@ -653,8 +656,11 @@ def player_stats():
             st.metric("Matches", int(player.matches))
             st.metric("Runs", int(player.runs))
             if player.balls > 0:
-                st.metric("Batting Average", round(player.runs / player.matches, 2))
+                st.metric("Batting Average", round(player.runs / player.matches, 2) if player.matches > 0 else 0)
                 st.metric("Strike Rate", round(player.runs / player.balls * 100, 2))
+            else:
+                st.metric("Batting Average", "-")
+                st.metric("Strike Rate", "-")
 
         with col2:
             st.metric("Wickets", int(player.wickets))
@@ -662,6 +668,9 @@ def player_stats():
                 st.metric("Bowling Average",
                           round(player.bowler_runs / player.wickets, 2) if player.wickets > 0 else "-")
                 st.metric("Economy Rate", round(player.bowler_runs / (player.bowler_balls / 6), 2))
+            else:
+                st.metric("Bowling Average", "-")
+                st.metric("Economy Rate", "-")
 
         # Charts
         st.subheader("Batting Performance")
@@ -692,35 +701,58 @@ def match_setup():
     st.session_state.overs = st.number_input("Number of overs", min_value=1, max_value=50, value=20)
 
     df = load_players()
+    if df.empty:
+        st.warning("No players found. Please add players first.")
+        return
+
     player_names = df["name"].tolist()
 
     st.session_state.team1 = st.text_input("Team 1 Name", "Team A")
     st.session_state.team2 = st.text_input("Team 2 Name", "Team B")
 
+    st.subheader("Select Team Squads")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.session_state.team1_players = st.multiselect(f"Select {st.session_state.team1} squad", 
+                                                      sorted(player_names),
+                                                      key="team1_select")
+    
+    with col2:
+        st.session_state.team2_players = st.multiselect(f"Select {st.session_state.team2} squad", 
+                                                      sorted(player_names),
+                                                      key="team2_select")
+
+    if len(st.session_state.team1_players) < 2 or len(st.session_state.team2_players) < 2:
+        st.warning("Each team must have at least 2 players")
+        return
+
     st.subheader("Select Opening Players")
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.session_state.current_batter = st.selectbox("Striker", sorted(player_names), key="striker_select")
+        st.session_state.current_batter = st.selectbox("Striker", 
+                                                     st.session_state.team1_players,
+                                                     key="striker_select")
     with col2:
         st.session_state.runner = st.selectbox("Non-Striker",
-                                               [p for p in sorted(player_names) if p != st.session_state.current_batter],
-                                               key="runner_select")
+                                             [p for p in st.session_state.team1_players 
+                                              if p != st.session_state.current_batter],
+                                             key="runner_select")
     with col3:
         st.session_state.current_bowler = st.selectbox("Opening Bowler",
-                                                       [p for p in sorted(player_names) if
-                                                        p not in [st.session_state.current_batter,
-                                                                  st.session_state.runner]],
-                                                       key="bowler_select")
+                                                     st.session_state.team2_players,
+                                                     key="bowler_select")
 
     if st.button("Start Match"):
         st.session_state.match_started = True
-        st.session_state.team_squad = player_names
+        st.session_state.match_active = True
+        st.session_state.team_squad = st.session_state.team1_players + st.session_state.team2_players
 
         # Initialize batters and bowlers
         for p in [st.session_state.current_batter, st.session_state.runner]:
             st.session_state.batters[p] = {"runs": 0, "balls": 0, "4s": 0, "6s": 0}
-        st.session_state.bowlers[st.session_state.current_bowler] = {"balls": 0, "runs": 0, "wickets": 0}
+        st.session_state.bowlers[st.session_state.current_bowler] = {"balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0}
 
         # Initialize match stats
         st.session_state.score = 0
@@ -734,7 +766,7 @@ def match_setup():
         st.session_state.last_event = None
 
         st.success("Match Started!")
-        st.experimental_rerun()
+        st.rerun()
 
 
 # Main app
@@ -813,9 +845,6 @@ def show_scoring():
     if st.session_state.last_event:
         st.info(f"Last event: {st.session_state.last_event}")
 
-    # Scoring controls
-    scoring_controls()
-
     # Over progression
     st.write("Current over:")
     cols = st.columns(6)
@@ -825,7 +854,13 @@ def show_scoring():
                 event = "•"  # Replace with actual ball events if tracking
                 st.markdown(f"<div style='text-align: center; font-size: 1.5em;'>{event}</div>", unsafe_allow_html=True)
 
+    # Scoring controls
+    scoring_controls()
+    
+    # Show modals if needed
+    show_new_batter_modal()
+    show_new_bowler_modal()
+
 
 if __name__ == "__main__":
-    init_session_state()
     main()
