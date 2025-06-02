@@ -104,6 +104,37 @@ def determine_winner():
         return "Match Tied"
 
 
+# Initialize session state variables
+def init_session_state():
+    if 'match_started' not in st.session_state:
+        st.session_state.match_started = False
+        st.session_state.overs = 20
+        st.session_state.team1 = "Team A"
+        st.session_state.team2 = "Team B"
+        st.session_state.current_batter = ""
+        st.session_state.runner = ""
+        st.session_state.current_bowler = ""
+        st.session_state.batters = {}
+        st.session_state.bowlers = {}
+        st.session_state.score = 0
+        st.session_state.wickets = 0
+        st.session_state.balls = 0
+        st.session_state.fow = []
+        st.session_state.partnership = 0
+        st.session_state.innings = 1
+        st.session_state.extras = {'wides': 0, 'noballs': 0, 'byes': 0, 'legbyes': 0}
+        st.session_state.free_hit = False
+        st.session_state.last_event = None
+        st.session_state.first_innings_score = 0
+        st.session_state.first_innings_wickets = 0
+        st.session_state.first_innings_balls = 0
+        st.session_state.innings1_batters = {}
+        st.session_state.innings1_bowlers = {}
+        st.session_state.target = 0
+        st.session_state.team_squad = []
+        st.session_state.mom = ""
+
+
 # Scoring functions
 def add_runs(runs):
     if st.session_state.free_hit:
@@ -609,6 +640,7 @@ def player_stats():
         ax.set_title('Batting Stats')
         ax.set_ylabel('Count')
         st.pyplot(fig)
+        plt.close(fig)
 
         st.subheader("Bowling Performance")
         fig, ax = plt.subplots()
@@ -618,6 +650,7 @@ def player_stats():
         ax.set_title('Bowling Stats')
         ax.set_ylabel('Count')
         st.pyplot(fig)
+        plt.close(fig)
 
 
 # Match setup
@@ -678,8 +711,7 @@ def main():
     st.set_page_config(layout="wide")
 
     # Initialize session state
-    if 'match_started' not in st.session_state:
-        st.session_state.match_started = False
+    init_session_state()
 
     # Navigation
     pages = {
