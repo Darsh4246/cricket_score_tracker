@@ -827,4 +827,5 @@ def show_scoring():
 
 
 if __name__ == "__main__":
+    init_session_state()
     main()
