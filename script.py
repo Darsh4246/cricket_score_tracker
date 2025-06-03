@@ -301,6 +301,7 @@ def add_wicket(method):
 
     # Show new batter modal
     st.session_state.show_new_batter_modal = True
+    check_match_completion()
     st.rerun()
 
 
