@@ -103,7 +103,77 @@ def determine_winner():
     else:
         return "Match Tied"
 
+def check_match_completion():
+    # Get current team's player count
+    current_team_size = st.session_state.team1_size if st.session_state.innings == 1 else st.session_state.team2_size
+    
+    # Check if innings is complete (all overs bowled or all out)
+    innings_complete = (
+        (st.session_state.balls >= st.session_state.overs * 6) or 
+        (st.session_state.wickets >= current_team_size - 1)  # All players except last one are out
+    )
+    
+    # For 2nd innings, also check if target is reached
+    if st.session_state.innings == 2:
+        target_reached = st.session_state.score >= st.session_state.target
+        if target_reached or innings_complete:
+            end_innings()
+    elif innings_complete:
+        end_innings()
 
+def determine_winner():
+    if st.session_state.innings == 1:
+        return None
+    
+    team1_score = st.session_state.first_innings_score
+    team2_score = st.session_state.score
+    team1_wickets = st.session_state.first_innings_wickets
+    team2_wickets = st.session_state.wickets
+    
+    # Team 1 wins if team2 scored less runs
+    if team2_score < team1_score:
+        return st.session_state.team1
+    # Team 2 wins if they scored more runs
+    elif team2_score > team1_score:
+        return st.session_state.team2
+    # If scores are equal
+    else:
+        # Team with more wickets wins
+        if team1_wickets > team2_wickets:
+            return st.session_state.team1
+        elif team2_wickets > team1_wickets:
+            return st.session_state.team2
+        else:
+            return "Match Tied"
+
+def show_match_summary():
+    st.subheader("📊 Match Summary")
+    winner = determine_winner()
+    
+    if winner == "Match Tied":
+        st.success("**Result**: Match Tied")
+    else:
+        if winner == st.session_state.team1:
+            margin = st.session_state.first_innings_score - st.session_state.score
+            wickets_left = st.session_state.team1_size - 1 - st.session_state.first_innings_wickets
+            st.success(f"**Result**: {winner} won by {wickets_left} wickets and {margin} runs")
+        else:
+            margin = st.session_state.score - st.session_state.first_innings_score
+            wickets_left = st.session_state.team2_size - 1 - st.session_state.wickets
+            st.success(f"**Result**: {winner} won by {margin} runs (with {wickets_left} wickets remaining)")
+    
+    # Show detailed scorecards
+    show_detailed_scorecard()
+    
+    # Man of the Match selection
+    players = list(st.session_state.innings1_batters.keys()) + list(st.session_state.innings1_bowlers.keys())
+    players += list(st.session_state.batters.keys()) + list(st.session_state.bowlers.keys())
+    
+    st.session_state.mom = st.selectbox("Man of the Match", sorted(set(players)))
+    if st.button("Save Match Data"):
+        save_match_to_db()  # Save MOM
+        st.session_state.match_started = False
+        st.rerun()
 # Initialize session state variables
 def init_session_state():
     if 'match_started' not in st.session_state:
@@ -138,6 +208,8 @@ def init_session_state():
         st.session_state.mom = ""
         st.session_state.show_new_batter_modal = False
         st.session_state.show_new_bowler_modal = False
+        st.session_state.team1_size = 0
+        st.session_state.team2_size = 0
 
 
 # Scoring functions
@@ -176,6 +248,7 @@ def add_runs(runs):
     # Check if over is completed
     if st.session_state.balls % 6 == 0 and st.session_state.balls > 0:
         st.session_state.show_new_bowler_modal = True
+        check_match_completion()
         st.rerun()
 
 
@@ -748,6 +821,8 @@ def match_setup():
         st.session_state.match_started = True
         st.session_state.match_active = True
         st.session_state.team_squad = st.session_state.team1_players + st.session_state.team2_players
+        st.session_state.team1_size = len(st.session_state.team1_players)
+        st.session_state.team2_size = len(st.session_state.team2_players)
 
         # Initialize batters and bowlers
         for p in [st.session_state.current_batter, st.session_state.runner]:
