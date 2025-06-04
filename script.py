@@ -176,7 +176,7 @@ def show_match_summary():
     if st.button("Save Match Data"):
         save_match_to_db()  # Save MOM
         st.session_state.match_started = False
-        st.rerun()
+        
 # Initialize session state variables
 def init_session_state():
     if 'match_started' not in st.session_state:
