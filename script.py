@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+import time as t
 
 # Initialize database
 def init_db():
@@ -110,7 +111,7 @@ def check_match_completion():
     # Check if innings is complete (all overs bowled or all out)
     innings_complete = (
         (st.session_state.balls >= st.session_state.overs * 6) or 
-        (st.session_state.wickets >= current_team_size - 1)  # All players except last one are out
+        (st.session_state.wickets >= current_team_size)  # All players except last one are out
     )
     
     # For 2nd innings, also check if target is reached
@@ -118,8 +119,10 @@ def check_match_completion():
         target_reached = st.session_state.score >= st.session_state.target
         if target_reached or innings_complete:
             end_innings()
+            st.rerun()  # Force immediate UI update
     elif innings_complete:
         end_innings()
+        st.rerun()  # Force immediate UI update
 
 def determine_winner():
     if st.session_state.innings == 1:
@@ -216,7 +219,7 @@ def init_session_state():
 def add_runs(runs):
     if st.session_state.free_hit:
         st.info("FREE HIT!")
-
+    check_match_completion()
     # Update batter stats
     batter = st.session_state.current_batter
     st.session_state.batters[batter]['runs'] += runs
@@ -225,23 +228,23 @@ def add_runs(runs):
         st.session_state.batters[batter]['4s'] += 1
     if runs == 6:
         st.session_state.batters[batter]['6s'] += 1
-
+    check_match_completion()
     # Update bowler stats
     bowler = st.session_state.current_bowler
     st.session_state.bowlers[bowler]['runs'] += runs
     if not st.session_state.free_hit:
         st.session_state.bowlers[bowler]['balls'] += 1
-
+    check_match_completion()
     # Update match stats
     st.session_state.score += runs
     st.session_state.partnership += runs
     if not st.session_state.free_hit:
         st.session_state.balls += 1
-
+    check_match_completion()
     # Reset free hit after a legal delivery
     if st.session_state.free_hit and not st.session_state.last_event == "noball":
         st.session_state.free_hit = False
-
+    check_match_completion()
     check_milestones()
     st.session_state.last_event = str(runs)
     
@@ -249,6 +252,7 @@ def add_runs(runs):
     if st.session_state.balls % 6 == 0 and st.session_state.balls > 0:
         st.session_state.show_new_bowler_modal = True
         check_match_completion()
+        t.sleep(1)
         st.rerun()
 
 
@@ -272,7 +276,8 @@ def add_extra(extra_type):
         st.session_state.score += 1
         st.session_state.extras['legbyes'] += 1
         st.session_state.last_event = "Leg Byes"
-
+    check_match_completion() 
+    st.rerun()
 
 def add_wicket(method):
     batter = st.session_state.current_batter
@@ -567,11 +572,15 @@ def show_new_batter_modal():
         with st.container():
             st.write("### Select New Batter")
             
-            # Get available players from the batting team
-            available_players = [p for p in (st.session_state.team1_players if st.session_state.innings == 1 else st.session_state.team2_players)
+            # Get available players from the CURRENT batting team
+            current_batting_team = st.session_state.team1_players if st.session_state.innings == 1 else st.session_state.team2_players
+            
+            available_players = [p for p in current_batting_team
                              if p not in st.session_state.batters or 'out' not in st.session_state.batters[p]]
             
-            if available_players and st.session_state.wickets < 10:
+            max_wickets = len(current_batting_team) - 1  # Team size - 1
+            
+            if available_players and st.session_state.wickets < max_wickets:
                 new_batter = st.selectbox("New Batter", available_players)
                 
                 if st.button("Confirm"):
