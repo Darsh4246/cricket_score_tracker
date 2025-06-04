@@ -217,43 +217,46 @@ def init_session_state():
 
 # Scoring functions
 def add_runs(runs):
-    if st.session_state.free_hit:
+    if st.session_state.free_hit and runs != 0:  # Don't show for dot balls
         st.info("FREE HIT!")
-    check_match_completion()
-    # Update batter stats
-    batter = st.session_state.current_batter
-    st.session_state.batters[batter]['runs'] += runs
-    st.session_state.batters[batter]['balls'] += 1
-    if runs == 4:
-        st.session_state.batters[batter]['4s'] += 1
-    if runs == 6:
-        st.session_state.batters[batter]['6s'] += 1
-    check_match_completion()
+
+    # Update batter stats (only if not a wide/noball)
+    if runs >= 0:  # Dot ball is 0, positive runs are normal
+        batter = st.session_state.current_batter
+        st.session_state.batters[batter]['balls'] += 1
+        st.session_state.batters[batter]['runs'] += runs
+        if runs == 4:
+            st.session_state.batters[batter]['4s'] += 1
+        if runs == 6:
+            st.session_state.batters[batter]['6s'] += 1
+    st.rerun()
     # Update bowler stats
     bowler = st.session_state.current_bowler
     st.session_state.bowlers[bowler]['runs'] += runs
     if not st.session_state.free_hit:
         st.session_state.bowlers[bowler]['balls'] += 1
-    check_match_completion()
+
     # Update match stats
     st.session_state.score += runs
     st.session_state.partnership += runs
     if not st.session_state.free_hit:
         st.session_state.balls += 1
-    check_match_completion()
+
     # Reset free hit after a legal delivery
     if st.session_state.free_hit and not st.session_state.last_event == "noball":
         st.session_state.free_hit = False
-    check_match_completion()
+
     check_milestones()
-    st.session_state.last_event = str(runs)
+    st.session_state.last_event = "Dot Ball" if runs == 0 else str(runs)
     
     # Check if over is completed
     if st.session_state.balls % 6 == 0 and st.session_state.balls > 0:
         st.session_state.show_new_bowler_modal = True
-        check_match_completion()
-        t.sleep(1)
-        st.rerun()
+    
+    check_match_completion()
+    st.rerun()
+    
+
 
 
 def add_extra(extra_type):
@@ -534,6 +537,7 @@ def scoring_controls():
 
     with cols[0]:
         st.markdown("**Runs**")
+        if st.button("0 (Dot)"): add_runs(0)
         if st.button("1"): add_runs(1)
         if st.button("2"): add_runs(2)
         if st.button("3"): add_runs(3)
