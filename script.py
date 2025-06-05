@@ -9,17 +9,21 @@ import os
 import shutil
 from datetime import datetime
 
+BASE_DIR = "/mount/src/cricket_score_tracker"
+DB_PATH = os.path.join(BASE_DIR, "cricket.db")
+BACKUP_DIR = os.path.join(BASE_DIR, "backups")
+
 # Initialize database
 def init_db():
-    # Ensure cricket.db exists in project root
-    db_path = "cricket.db"
-    if not os.path.exists(db_path):
-        print("[INFO] Creating new cricket.db file...")
+    os.makedirs(BASE_DIR, exist_ok=True)
 
-    conn = sqlite3.connect(db_path)
+    if not os.path.exists(DB_PATH):
+        print(f"[INFO] Creating new database at {DB_PATH}")
+
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Create tables if not exist
+    # Create tables
     c.execute('''CREATE TABLE IF NOT EXISTS players (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE,
