@@ -18,6 +18,7 @@ def init_db():
                   matches INTEGER DEFAULT 0,
                   runs INTEGER DEFAULT 0,
                   balls INTEGER DEFAULT 0,
+                  dots INTEGER DEFAULT 0,
                   fours INTEGER DEFAULT 0,
                   sixes INTEGER DEFAULT 0,
                   wickets INTEGER DEFAULT 0,
@@ -195,6 +196,7 @@ def init_session_state():
         st.session_state.score = 0
         st.session_state.wickets = 0
         st.session_state.balls = 0
+        st.session_state.current_over = []
         st.session_state.fow = []
         st.session_state.partnership = 0
         st.session_state.innings = 1
@@ -213,34 +215,40 @@ def init_session_state():
         st.session_state.show_new_bowler_modal = False
         st.session_state.team1_size = 0
         st.session_state.team2_size = 0
+        st.session_state.current_partners = []
 
 
 # Scoring functions
 def add_runs(runs):
-    if st.session_state.free_hit and runs != 0:  # Don't show for dot balls
+    st.toast(f"add_runs({runs}) called")
+    if st.session_state.free_hit and runs != 0:
         st.info("FREE HIT!")
 
-    # Update batter stats (only if not a wide/noball)
-    if runs >= 0:  # Dot ball is 0, positive runs are normal
-        batter = st.session_state.current_batter
-        st.session_state.batters[batter]['balls'] += 1
-        st.session_state.batters[batter]['runs'] += runs
-        if runs == 4:
-            st.session_state.batters[batter]['4s'] += 1
-        if runs == 6:
-            st.session_state.batters[batter]['6s'] += 1
-    st.rerun()
-    # Update bowler stats
+    batter = st.session_state.current_batter
     bowler = st.session_state.current_bowler
+
+    # Update batter stats
+    st.session_state.batters[batter]['runs'] += runs
+    if runs == 0:
+        st.session_state.batters[batter]['dots'] = st.session_state.batters[batter].get('dots', 0) + 1
+    if runs == 4:
+        st.session_state.batters[batter]['4s'] += 1
+    if runs == 6:
+        st.session_state.batters[batter]['6s'] += 1
+
+    # Update bowler stats
     st.session_state.bowlers[bowler]['runs'] += runs
+
+    # Count balls only on legal deliveries
     if not st.session_state.free_hit:
-        st.session_state.bowlers[bowler]['balls'] += 1
+        st.session_state.batters[batter]['balls'] += 1
+        st.session_state.bowlers[bowler]['balls'] += 1  # Fixed typo
+        st.session_state.balls += 1
+        st.session_state.current_over.append(str(runs))
 
     # Update match stats
     st.session_state.score += runs
     st.session_state.partnership += runs
-    if not st.session_state.free_hit:
-        st.session_state.balls += 1
 
     # Reset free hit after a legal delivery
     if st.session_state.free_hit and not st.session_state.last_event == "noball":
@@ -248,16 +256,14 @@ def add_runs(runs):
 
     check_milestones()
     st.session_state.last_event = "Dot Ball" if runs == 0 else str(runs)
-    
+
     # Check if over is completed
     if st.session_state.balls % 6 == 0 and st.session_state.balls > 0:
         st.session_state.show_new_bowler_modal = True
-    
+        st.session_state.current_over = []
+
     check_match_completion()
     st.rerun()
-    
-
-
 
 def add_extra(extra_type):
     if extra_type == 'wide':
@@ -312,7 +318,6 @@ def add_wicket(method):
     check_match_completion()
     st.rerun()
 
-
 # Match management
 def check_milestones():
     # Team milestones
@@ -331,7 +336,6 @@ def check_milestones():
     elif batter_runs == 100:
         st.balloons()
         st.success(f"🎯 {st.session_state.current_batter} CENTURY!")
-
 
 def end_innings():
     if st.session_state.innings == 1:
@@ -355,7 +359,6 @@ def end_innings():
         st.success("🏁 Match Over!")
         show_match_summary()
         st.session_state.match_active = False
-
 
 def reset_for_new_innings():
     st.session_state.innings = 2
@@ -386,7 +389,6 @@ def reset_for_new_innings():
 
     st.session_state.match_started = True
     st.rerun()
-
 
 # Database functions
 def save_match_to_db():
@@ -439,7 +441,6 @@ def save_match_to_db():
 
     conn.commit()
     conn.close()
-
 
 def update_player_stats():
     conn = sqlite3.connect('cricket.db')
@@ -499,6 +500,7 @@ def update_player_stats():
                      WHERE name = ?''',
                   (batting_stats['runs'],
                    batting_stats['balls'],
+                   batting_stats.get('dots', 0),
                    batting_stats['4s'],
                    batting_stats['6s'],
                    bowling_stats['wickets'],
@@ -508,7 +510,6 @@ def update_player_stats():
 
     conn.commit()
     conn.close()
-
 
 # UI Components
 def scoring_controls():
@@ -537,12 +538,18 @@ def scoring_controls():
 
     with cols[0]:
         st.markdown("**Runs**")
-        if st.button("0 (Dot)"): add_runs(0)
-        if st.button("1"): add_runs(1)
-        if st.button("2"): add_runs(2)
-        if st.button("3"): add_runs(3)
-        if st.button("4"): add_runs(4)
-        if st.button("6"): add_runs(6)
+        row1 = st.columns(2)
+        with row1[0]:
+            if st.button("0 (Dot)"): add_runs(0)
+            if st.button("1"): add_runs(1)
+        with row1[1]:
+            if st.button("2"): add_runs(2)
+            if st.button("3"): add_runs(3)
+        row2 = st.columns(2)
+        with row2[0]:
+            if st.button("4"): add_runs(4)
+        with row2[1]:
+            if st.button("6"): add_runs(6)
 
     with cols[1]:
         st.markdown("**Extras**")
@@ -558,18 +565,16 @@ def scoring_controls():
         if st.button("LBW"): add_wicket('lbw')
         if st.button("Run Out"): add_wicket('run_out')
 
+
     with cols[3]:
         st.markdown("**Match**")
         if st.button("Switch Strike"): switch_strike()
         if st.button("New Bowler"): 
             st.session_state.show_new_bowler_modal = True
-            st.rerun()
         if st.button("End Innings"): end_innings()
         if st.button("Cancel Match", type="secondary"): 
             st.session_state.match_started = False
             st.session_state.match_active = False
-            st.rerun()
-
 
 def show_new_batter_modal():
     if st.session_state.show_new_batter_modal:
@@ -586,15 +591,16 @@ def show_new_batter_modal():
             
             if available_players and st.session_state.wickets < max_wickets:
                 new_batter = st.selectbox("New Batter", available_players)
-                
+
                 if st.button("Confirm"):
                     st.session_state.current_batter = new_batter
                     st.session_state.batters[new_batter] = {'runs': 0, 'balls': 0, '4s': 0, '6s': 0}
+                    st.session_state.current_partners = [st.session_state.current_batter, st.session_state.runner]
+                    st.session_state.partnership = 0
                     st.session_state.show_new_batter_modal = False
                     st.rerun()
             else:
                 end_innings()
-
 
 def show_new_bowler_modal():
     if st.session_state.show_new_bowler_modal:
@@ -614,7 +620,6 @@ def show_new_bowler_modal():
                         st.session_state.bowlers[new_bowler] = {"balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0}
                     st.session_state.show_new_bowler_modal = False
                     st.rerun()
-
 
 def show_match_summary():
     st.subheader("📊 Match Summary")
@@ -640,7 +645,6 @@ def show_match_summary():
         st.session_state.match_started = False
         st.rerun()
 
-
 def show_detailed_scorecard():
     st.subheader("📝 Detailed Scorecard")
 
@@ -650,7 +654,6 @@ def show_detailed_scorecard():
         show_innings_scorecard(1)
     with tab2:
         show_innings_scorecard(2)
-
 
 def show_innings_scorecard(innings):
     if innings == 1 or (innings == 2 and st.session_state.innings == 2):
@@ -699,14 +702,12 @@ def show_innings_scorecard(innings):
                 for w in fow:
                     st.write(f"{w['wicket']}-{w['score']} ({w['batter']}, {w['overs']})")
 
-
 # Player management
 def load_players():
     conn = sqlite3.connect('cricket.db')
     df = pd.read_sql("SELECT * FROM players", conn)
     conn.close()
     return df
-
 
 def player_profile():
     st.title("📋 Player Profile Creation")
@@ -723,7 +724,6 @@ def player_profile():
             st.warning("Player already exists!")
         finally:
             conn.close()
-
 
 def player_stats():
     st.title("📊 Player Statistics")
@@ -742,6 +742,7 @@ def player_stats():
         with col1:
             st.metric("Matches", int(player.matches))
             st.metric("Runs", int(player.runs))
+            st.metric("Dot Balls", int(player.dots))
             if player.balls > 0:
                 st.metric("Batting Average", round(player.runs / player.matches, 2) if player.matches > 0 else 0)
                 st.metric("Strike Rate", round(player.runs / player.balls * 100, 2))
@@ -878,8 +879,11 @@ def main():
     selection = st.sidebar.radio("Go to", list(pages.keys()))
 
     # Page routing
-    if pages[selection] == "setup":
-        match_setup()
+    elif pages[selection] == "scoring":
+    if st.session_state.match_started:
+        show_scoring()
+    else:
+        st.warning("⚠️ Please start the match first from the 'Match Setup' page.")
     elif pages[selection] == "scoring" and st.session_state.match_started:
         show_scoring()
     elif pages[selection] == "profile":
