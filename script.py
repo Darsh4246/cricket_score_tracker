@@ -5,69 +5,79 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import time as t
+import os
+import shutil
+from datetime import datetime
 
 # Initialize database
 def init_db():
-    conn = sqlite3.connect('cricket.db')
+    # Ensure cricket.db exists in project root
+    db_path = "cricket.db"
+    if not os.path.exists(db_path):
+        print("[INFO] Creating new cricket.db file...")
+
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
 
-    # Players table
-    c.execute('''CREATE TABLE IF NOT EXISTS players
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  name TEXT UNIQUE,
-                  matches INTEGER DEFAULT 0,
-                  runs INTEGER DEFAULT 0,
-                  balls INTEGER DEFAULT 0,
-                  dots INTEGER DEFAULT 0,
-                  fours INTEGER DEFAULT 0,
-                  sixes INTEGER DEFAULT 0,
-                  wickets INTEGER DEFAULT 0,
-                  bowler_runs INTEGER DEFAULT 0,
-                  bowler_balls INTEGER DEFAULT 0)''')
+    # Create tables if not exist
+    c.execute('''CREATE TABLE IF NOT EXISTS players (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        matches INTEGER DEFAULT 0,
+        runs INTEGER DEFAULT 0,
+        balls INTEGER DEFAULT 0,
+        dots INTEGER DEFAULT 0,
+        fours INTEGER DEFAULT 0,
+        sixes INTEGER DEFAULT 0,
+        wickets INTEGER DEFAULT 0,
+        bowler_runs INTEGER DEFAULT 0,
+        bowler_balls INTEGER DEFAULT 0
+    )''')
 
-    # Matches table
-    c.execute('''CREATE TABLE IF NOT EXISTS matches
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  date TEXT DEFAULT CURRENT_DATE,
-                  team1 TEXT,
-                  team2 TEXT,
-                  overs INTEGER,
-                  innings1_score INTEGER,
-                  innings1_wickets INTEGER,
-                  innings1_overs REAL,
-                  innings2_score INTEGER,
-                  innings2_wickets INTEGER,
-                  innings2_overs REAL,
-                  winner TEXT,
-                  mom TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT DEFAULT CURRENT_DATE,
+        team1 TEXT,
+        team2 TEXT,
+        overs INTEGER,
+        innings1_score INTEGER,
+        innings1_wickets INTEGER,
+        innings1_overs REAL,
+        innings2_score INTEGER,
+        innings2_wickets INTEGER,
+        innings2_overs REAL,
+        winner TEXT,
+        mom TEXT
+    )''')
 
-    # Match details tables
-    c.execute('''CREATE TABLE IF NOT EXISTS batting_scorecards
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  match_id INTEGER,
-                  player_id INTEGER,
-                  innings INTEGER,
-                  runs INTEGER,
-                  balls INTEGER,
-                  fours INTEGER,
-                  sixes INTEGER,
-                  out_desc TEXT,
-                  FOREIGN KEY(match_id) REFERENCES matches(id),
-                  FOREIGN KEY(player_id) REFERENCES players(id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS batting_scorecards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        match_id INTEGER,
+        player_id INTEGER,
+        innings INTEGER,
+        runs INTEGER,
+        balls INTEGER,
+        fours INTEGER,
+        sixes INTEGER,
+        out_desc TEXT,
+        FOREIGN KEY(match_id) REFERENCES matches(id),
+        FOREIGN KEY(player_id) REFERENCES players(id)
+    )''')
 
-    c.execute('''CREATE TABLE IF NOT EXISTS bowling_scorecards
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  match_id INTEGER,
-                  player_id INTEGER,
-                  innings INTEGER,
-                  overs REAL,
-                  maidens INTEGER,
-                  runs INTEGER,
-                  wickets INTEGER,
-                  wides INTEGER,
-                  noballs INTEGER,
-                  FOREIGN KEY(match_id) REFERENCES matches(id),
-                  FOREIGN KEY(player_id) REFERENCES players(id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS bowling_scorecards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        match_id INTEGER,
+        player_id INTEGER,
+        innings INTEGER,
+        overs REAL,
+        maidens INTEGER,
+        runs INTEGER,
+        wickets INTEGER,
+        wides INTEGER,
+        noballs INTEGER,
+        FOREIGN KEY(match_id) REFERENCES matches(id),
+        FOREIGN KEY(player_id) REFERENCES players(id)
+    )''')
 
     conn.commit()
     conn.close()
