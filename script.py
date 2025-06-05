@@ -861,13 +861,9 @@ def match_setup():
 
 # Main app
 def main():
-    # Mobile optimization
     st.set_page_config(layout="wide")
-
-    # Initialize session state
     init_session_state()
 
-    # Navigation
     pages = {
         "Match Setup": "setup",
         "Live Scoring": "scoring",
@@ -878,21 +874,23 @@ def main():
     st.sidebar.title("Navigation")
     selection = st.sidebar.radio("Go to", list(pages.keys()))
 
-    # Page routing
+    if pages[selection] == "setup":
+        match_setup()
+
     elif pages[selection] == "scoring":
-    if st.session_state.match_started:
-        show_scoring()
-    else:
-        st.warning("⚠️ Please start the match first from the 'Match Setup' page.")
-    elif pages[selection] == "scoring" and st.session_state.match_started:
-        show_scoring()
+        if st.session_state.match_started:
+            show_scoring()
+        else:
+            st.warning("\u26a0\ufe0f Please start the match first from ‘Match Setup’.")
+
     elif pages[selection] == "profile":
         player_profile()
+
     elif pages[selection] == "stats":
         player_stats()
-    else:
-        st.warning("Please start a match first")
 
+    else:
+        st.warning("Unknown page selected. Please check the navigation options.")
 
 def show_scoring():
     st.title("🏏 Live Scoring")
