@@ -489,24 +489,25 @@ def update_player_stats():
 
         # Update database
         c.execute('''UPDATE players SET
-                     matches = matches + 1,
-                     runs = runs + ?,
-                     balls = balls + ?,
-                     fours = fours + ?,
-                     sixes = sixes + ?,
-                     wickets = wickets + ?,
-                     bowler_runs = bowler_runs + ?,
-                     bowler_balls = bowler_balls + ?
-                     WHERE name = ?''',
-                  (batting_stats['runs'],
-                   batting_stats['balls'],
-                   batting_stats.get('dots', 0),
-                   batting_stats['4s'],
-                   batting_stats['6s'],
-                   bowling_stats['wickets'],
-                   bowling_stats['runs'],
-                   bowling_stats['balls'],
-                   player))
+             matches = matches + 1,
+             runs = runs + ?,
+             balls = balls + ?,
+             dots = dots + ?,
+             fours = fours + ?,
+             sixes = sixes + ?,
+             wickets = wickets + ?,
+             bowler_runs = bowler_runs + ?,
+             bowler_balls = bowler_balls + ?
+             WHERE name = ?''',
+          (batting_stats['runs'],
+           batting_stats['balls'],
+           batting_stats.get('dots', 0),
+           batting_stats['4s'],
+           batting_stats['6s'],
+           bowling_stats['wickets'],
+           bowling_stats['runs'],
+           bowling_stats['balls'],
+           player))
 
     conn.commit()
     conn.close()
@@ -606,18 +607,25 @@ def show_new_bowler_modal():
     if st.session_state.show_new_bowler_modal:
         with st.container():
             st.write("### Select New Bowler")
-            
-            # Get available players from the bowling team
-            available_players = [p for p in (st.session_state.team2_players if st.session_state.innings == 1 else st.session_state.team1_players)
-                             if p not in [st.session_state.current_batter, st.session_state.runner]]
-            
+
+            # Get available players from the **current bowling team**
+            if st.session_state.innings == 1:
+                bowling_team = st.session_state.team2_players
+            else:
+                bowling_team = st.session_state.team2_players  # <- STILL team2, because of team swap earlier
+
+            available_players = [p for p in bowling_team
+                                 if p not in [st.session_state.current_batter, st.session_state.runner]]
+
             if available_players:
                 new_bowler = st.selectbox("New Bowler", available_players)
-                
+
                 if st.button("Confirm"):
                     st.session_state.current_bowler = new_bowler
                     if new_bowler not in st.session_state.bowlers:
-                        st.session_state.bowlers[new_bowler] = {"balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0}
+                        st.session_state.bowlers[new_bowler] = {
+                            "balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0
+                        }
                     st.session_state.show_new_bowler_modal = False
                     st.rerun()
 
