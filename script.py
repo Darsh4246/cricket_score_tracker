@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,92 +7,19 @@ import time as t
 import os
 import shutil
 from datetime import datetime
+from supabase import create_client, Client
 
-
-DB_PATH = "cricket.db"
-
-
-# Initialize database
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-
-    # Create tables
-    c.execute('''CREATE TABLE IF NOT EXISTS players (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE,
-        matches INTEGER DEFAULT 0,
-        runs INTEGER DEFAULT 0,
-        balls INTEGER DEFAULT 0,
-        dots INTEGER DEFAULT 0,
-        fours INTEGER DEFAULT 0,
-        sixes INTEGER DEFAULT 0,
-        wickets INTEGER DEFAULT 0,
-        bowler_runs INTEGER DEFAULT 0,
-        bowler_balls INTEGER DEFAULT 0
-    )''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS matches (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT DEFAULT CURRENT_DATE,
-        team1 TEXT,
-        team2 TEXT,
-        overs INTEGER,
-        innings1_score INTEGER,
-        innings1_wickets INTEGER,
-        innings1_overs REAL,
-        innings2_score INTEGER,
-        innings2_wickets INTEGER,
-        innings2_overs REAL,
-        winner TEXT,
-        mom TEXT
-    )''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS batting_scorecards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        match_id INTEGER,
-        player_id INTEGER,
-        innings INTEGER,
-        runs INTEGER,
-        balls INTEGER,
-        fours INTEGER,
-        sixes INTEGER,
-        out_desc TEXT,
-        FOREIGN KEY(match_id) REFERENCES matches(id),
-        FOREIGN KEY(player_id) REFERENCES players(id)
-    )''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS bowling_scorecards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        match_id INTEGER,
-        player_id INTEGER,
-        innings INTEGER,
-        overs REAL,
-        maidens INTEGER,
-        runs INTEGER,
-        wickets INTEGER,
-        wides INTEGER,
-        noballs INTEGER,
-        FOREIGN KEY(match_id) REFERENCES matches(id),
-        FOREIGN KEY(player_id) REFERENCES players(id)
-    )''')
-
-    conn.commit()
-    conn.close()
-
-
-# Initialize the database
-init_db()
-
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Helper functions
 def get_player_id(name):
-    conn = sqlite3.connect('cricket.db')
-    c = conn.cursor()
-    c.execute("SELECT id FROM players WHERE name = ?", (name,))
-    result = c.fetchone()
-    conn.close()
-    return result[0] if result else None
+    response = supabase.table("players").select("id").eq("name", name).execute()
+    if response.data:
+        return response.data[0]["id"]
+    return None
+
 
 
 def format_overs(balls):
@@ -401,125 +327,96 @@ def reset_for_new_innings():
 
 # Database functions
 def save_match_to_db():
-    conn = sqlite3.connect('cricket.db')
-    c = conn.cursor()
+    match = {
+        "team1": st.session_state.team1,
+        "team2": st.session_state.team2,
+        "overs": st.session_state.overs,
+        "innings1_score": st.session_state.first_innings_score,
+        "innings1_wickets": st.session_state.first_innings_wickets,
+        "innings1_overs": format_overs(st.session_state.first_innings_balls),
+        "innings2_score": st.session_state.score,
+        "innings2_wickets": st.session_state.wickets,
+        "innings2_overs": format_overs(st.session_state.balls),
+        "winner": determine_winner(),
+        "mom": st.session_state.mom
+    }
+    response = supabase.table("matches").insert(match).execute()
+    match_id = response.data[0]["id"]
 
-    # Save match header
-    c.execute('''INSERT INTO matches 
-                 (team1, team2, overs, innings1_score, innings1_wickets, innings1_overs,
-                  innings2_score, innings2_wickets, innings2_overs, winner, mom)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-              (st.session_state.team1, st.session_state.team2, st.session_state.overs,
-               st.session_state.first_innings_score,
-               st.session_state.first_innings_wickets,
-               format_overs(st.session_state.first_innings_balls),
-               st.session_state.score,
-               st.session_state.wickets,
-               format_overs(st.session_state.balls),
-               determine_winner(),
-               st.session_state.mom))
-
-    match_id = c.lastrowid
-
-    # Save batting scorecards
+    # Batting
     for innings in [1, 2]:
-        batters = st.session_state[f'innings{innings}_batters'] if innings == 1 else st.session_state.batters
-        for player_name, stats in batters.items():
-            player_id = get_player_id(player_name)
-            c.execute('''INSERT INTO batting_scorecards
-                         (match_id, player_id, innings, runs, balls, fours, sixes, out_desc)
-                         VALUES (?,?,?,?,?,?,?,?)''',
-                      (match_id, player_id, innings,
-                       stats['runs'], stats['balls'],
-                       stats['4s'], stats['6s'],
-                       stats.get('out', 'not out')))
+        batters = st.session_state[f"innings{innings}_batters"] if innings == 1 else st.session_state.batters
+        for name, stats in batters.items():
+            player_id = get_player_id(name)
+            supabase.table("batting_scorecards").insert({
+                "match_id": match_id,
+                "player_id": player_id,
+                "innings": innings,
+                "runs": stats["runs"],
+                "balls": stats["balls"],
+                "fours": stats["4s"],
+                "sixes": stats["6s"],
+                "out_desc": stats.get("out", "not out")
+            }).execute()
 
-    # Save bowling scorecards
+    # Bowling
     for innings in [1, 2]:
-        bowlers = st.session_state[f'innings{innings}_bowlers'] if innings == 1 else st.session_state.bowlers
-        for player_name, stats in bowlers.items():
-            player_id = get_player_id(player_name)
-            c.execute('''INSERT INTO bowling_scorecards
-                         (match_id, player_id, innings, overs, maidens, runs, wickets, wides, noballs)
-                         VALUES (?,?,?,?,?,?,?,?,?)''',
-                      (match_id, player_id, innings,
-                       round(stats['balls'] / 6, 1),
-                       stats.get('maidens', 0),
-                       stats['runs'], stats['wickets'],
-                       stats.get('wides', 0), stats.get('noballs', 0)))
+        bowlers = st.session_state[f"innings{innings}_bowlers"] if innings == 1 else st.session_state.bowlers
+        for name, stats in bowlers.items():
+            player_id = get_player_id(name)
+            supabase.table("bowling_scorecards").insert({
+                "match_id": match_id,
+                "player_id": player_id,
+                "innings": innings,
+                "overs": round(stats["balls"] / 6, 1),
+                "maidens": stats.get("maidens", 0),
+                "runs": stats["runs"],
+                "wickets": stats["wickets"],
+                "wides": stats.get("wides", 0),
+                "noballs": stats.get("noballs", 0)
+            }).execute()
 
-    conn.commit()
-    conn.close()
 
 def update_player_stats():
-    conn = sqlite3.connect('cricket.db')
-    c = conn.cursor()
-
-    # Update all players who participated
     all_players = set()
     for innings in [1, 2]:
-        batters = st.session_state[f'innings{innings}_batters'] if innings == 1 else st.session_state.batters
-        bowlers = st.session_state[f'innings{innings}_bowlers'] if innings == 1 else st.session_state.bowlers
+        batters = st.session_state[f"innings{innings}_batters"] if innings == 1 else st.session_state.batters
+        bowlers = st.session_state[f"innings{innings}_bowlers"] if innings == 1 else st.session_state.bowlers
         all_players.update(batters.keys())
         all_players.update(bowlers.keys())
 
-    for player in all_players:
-        # Get stats across both innings
-        batting_stats = {
-            'runs': 0,
-            'balls': 0,
-            '4s': 0,
-            '6s': 0
-        }
-        bowling_stats = {
-            'wickets': 0,
-            'runs': 0,
-            'balls': 0,
-            'wides': 0,
-            'noballs': 0
-        }
-
+    for name in all_players:
+        batting = {"runs": 0, "balls": 0, "4s": 0, "6s": 0, "dots": 0}
+        bowling = {"wickets": 0, "runs": 0, "balls": 0, "wides": 0, "noballs": 0}
         for innings in [1, 2]:
-            batters = st.session_state[f'innings{innings}_batters'] if innings == 1 else st.session_state.batters
-            bowlers = st.session_state[f'innings{innings}_bowlers'] if innings == 1 else st.session_state.bowlers
+            batters = st.session_state[f"innings{innings}_batters"] if innings == 1 else st.session_state.batters
+            bowlers = st.session_state[f"innings{innings}_bowlers"] if innings == 1 else st.session_state.bowlers
+            if name in batters:
+                b = batters[name]
+                batting["runs"] += b["runs"]
+                batting["balls"] += b["balls"]
+                batting["4s"] += b["4s"]
+                batting["6s"] += b["6s"]
+                batting["dots"] += b.get("dots", 0)
+            if name in bowlers:
+                bl = bowlers[name]
+                bowling["wickets"] += bl["wickets"]
+                bowling["runs"] += bl["runs"]
+                bowling["balls"] += bl["balls"]
+                bowling["wides"] += bl.get("wides", 0)
+                bowling["noballs"] += bl.get("noballs", 0)
 
-            if player in batters:
-                batting_stats['runs'] += batters[player].get('runs', 0)
-                batting_stats['balls'] += batters[player].get('balls', 0)
-                batting_stats['4s'] += batters[player].get('4s', 0)
-                batting_stats['6s'] += batters[player].get('6s', 0)
-
-            if player in bowlers:
-                bowling_stats['wickets'] += bowlers[player].get('wickets', 0)
-                bowling_stats['runs'] += bowlers[player].get('runs', 0)
-                bowling_stats['balls'] += bowlers[player].get('balls', 0)
-                bowling_stats['wides'] += bowlers[player].get('wides', 0)
-                bowling_stats['noballs'] += bowlers[player].get('noballs', 0)
-
-        # Update database
-        c.execute('''UPDATE players SET
-             matches = matches + 1,
-             runs = runs + ?,
-             balls = balls + ?,
-             dots = dots + ?,
-             fours = fours + ?,
-             sixes = sixes + ?,
-             wickets = wickets + ?,
-             bowler_runs = bowler_runs + ?,
-             bowler_balls = bowler_balls + ?
-             WHERE name = ?''',
-          (batting_stats['runs'],
-           batting_stats['balls'],
-           batting_stats.get('dots', 0),
-           batting_stats['4s'],
-           batting_stats['6s'],
-           bowling_stats['wickets'],
-           bowling_stats['runs'],
-           bowling_stats['balls'],
-           player))
-
-    conn.commit()
-    conn.close()
+        supabase.table("players").update({
+            "matches": supabase.table("players").select("matches").eq("name", name).execute().data[0]["matches"] + 1,
+            "runs": batting["runs"],
+            "balls": batting["balls"],
+            "dots": batting["dots"],
+            "fours": batting["4s"],
+            "sixes": batting["6s"],
+            "wickets": bowling["wickets"],
+            "bowler_runs": bowling["runs"],
+            "bowler_balls": bowling["balls"]
+        }).eq("name", name).execute()
 
 # UI Components
 def scoring_controls():
@@ -721,26 +618,19 @@ def show_innings_scorecard(innings):
 
 # Player management
 def load_players():
-    conn = sqlite3.connect('cricket.db')
-    df = pd.read_sql("SELECT * FROM players", conn)
-    conn.close()
-    return df
+    response = supabase.table("players").select("*").execute()
+    return pd.DataFrame(response.data)
 
 def player_profile():
     st.title("📋 Player Profile Creation")
-
     name = st.text_input("Enter player name:")
     if st.button("Add Player"):
-        conn = sqlite3.connect('cricket.db')
-        c = conn.cursor()
         try:
-            c.execute("INSERT INTO players (name) VALUES (?)", (name,))
-            conn.commit()
+            supabase.table("players").insert({"name": name}).execute()
             st.success("Player added successfully!")
-        except sqlite3.IntegrityError:
-            st.warning("Player already exists!")
-        finally:
-            conn.close()
+        except Exception:
+            st.warning("Player already exists or error occurred!")
+
 
 def player_stats():
     st.title("📊 Player Statistics")
