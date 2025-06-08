@@ -9,17 +9,12 @@ import os
 import shutil
 from datetime import datetime
 
-BASE_DIR = "/mount/src/cricket_score_tracker"
-DB_PATH = os.path.join(BASE_DIR, "cricket.db")
-BACKUP_DIR = os.path.join(BASE_DIR, "backups")
+
+DB_PATH = "cricket.db"
+
 
 # Initialize database
 def init_db():
-    os.makedirs(BASE_DIR, exist_ok=True)
-
-    if not os.path.exists(DB_PATH):
-        print(f"[INFO] Creating new database at {DB_PATH}")
-
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
