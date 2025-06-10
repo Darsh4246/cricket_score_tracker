@@ -41,24 +41,23 @@ def determine_winner():
         return "Match Tied"
 
 def check_match_completion():
-    # Get current team's player count
     current_team_size = st.session_state.team1_size if st.session_state.innings == 1 else st.session_state.team2_size
     
-    # Check if innings is complete (all overs bowled or all out)
-    innings_complete = (
-        (st.session_state.balls >= st.session_state.overs * 6) or 
-        (st.session_state.wickets >= current_team_size)  # All players except last one are out
-    )
+    # All out condition (all players except one are out)
+    all_out = st.session_state.wickets >= current_team_size
     
-    # For 2nd innings, also check if target is reached
-    if st.session_state.innings == 2:
-        target_reached = st.session_state.score >= st.session_state.target
-        if target_reached or innings_complete:
-            end_innings()
-            st.rerun()  # Force immediate UI update
-    elif innings_complete:
+    # Overs completed condition
+    overs_completed = st.session_state.balls >= st.session_state.overs * 6
+    
+    # For 1st innings
+    if st.session_state.innings == 1 and (all_out or overs_completed):
         end_innings()
-        st.rerun()  # Force immediate UI update
+    
+    # For 2nd innings
+    elif st.session_state.innings == 2:
+        target_reached = st.session_state.score >= st.session_state.target
+        if target_reached or all_out or overs_completed:
+            end_innings()
 
 def determine_winner():
     if st.session_state.innings == 1:
@@ -151,6 +150,7 @@ def init_session_state():
         st.session_state.team1_size = 0
         st.session_state.team2_size = 0
         st.session_state.current_partners = []
+        st.session_state.show_second_innings_setup = False
 
 
 # Scoring functions
@@ -313,9 +313,8 @@ def reset_for_new_innings():
     st.session_state.team1_players, st.session_state.team2_players = st.session_state.team2_players, st.session_state.team1_players
 
     # Setup new innings
-    st.session_state.current_batter = st.session_state.team1_players[0]
-    st.session_state.runner = st.session_state.team1_players[1]
-    st.session_state.current_bowler = st.session_state.team2_players[0]
+    st.session_state.show_second_innings_setup = True
+    
 
     # Initialize batters and bowlers
     for p in [st.session_state.current_batter, st.session_state.runner]:
@@ -324,6 +323,31 @@ def reset_for_new_innings():
 
     st.session_state.match_started = True
     st.rerun()
+
+
+def show_second_innings_setup():
+    if st.session_state.show_second_innings_setup:
+        with st.container():
+            st.write("### Second Innings Setup")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.session_state.current_batter = st.selectbox("Striker", st.session_state.team1_players)
+            with col2:
+                st.session_state.runner = st.selectbox("Non-Striker", 
+                    [p for p in st.session_state.team1_players if p != st.session_state.current_batter])
+            with col3:
+                st.session_state.current_bowler = st.selectbox("Opening Bowler", st.session_state.team2_players)
+            
+            if st.button("Start Second Innings"):
+                # Initialize players
+                for p in [st.session_state.current_batter, st.session_state.runner]:
+                    st.session_state.batters[p] = {'runs': 0, 'balls': 0, '4s': 0, '6s': 0}
+                st.session_state.bowlers[st.session_state.current_bowler] = {
+                    "balls": 0, "runs": 0, "wickets": 0, "wides": 0, "noballs": 0
+                }
+                st.session_state.show_second_innings_setup = False
+                st.rerun()
+
 
 # Database functions
 def save_match_to_db():
@@ -514,14 +538,12 @@ def show_new_bowler_modal():
         with st.container():
             st.write("### Select New Bowler")
 
-            # Get available players from the **current bowling team**
-            if st.session_state.innings == 1:
-                bowling_team = st.session_state.team2_players
-            else:
-                bowling_team = st.session_state.team2_players  # <- STILL team2, because of team swap earlier
+            # Add this line to correctly identify the bowling team:
+            bowling_team = st.session_state.team2_players if st.session_state.innings == 1 else st.session_state.team1_players
 
+            # Then use bowling_team for available players:
             available_players = [p for p in bowling_team
-                                 if p not in [st.session_state.current_batter, st.session_state.runner]]
+                               if p not in [st.session_state.current_batter, st.session_state.runner]]
 
             if available_players:
                 new_bowler = st.selectbox("New Bowler", available_players)
@@ -705,6 +727,9 @@ def match_setup():
     st.session_state.team1 = st.text_input("Team 1 Name", "Team A")
     st.session_state.team2 = st.text_input("Team 2 Name", "Team B")
 
+    toss_winner = st.selectbox("Toss Winner", [st.session_state.team1, st.session_state.team2])
+    choice = st.selectbox("What they chose to do", ["Bat", "Bowl"])
+
     st.subheader("Select Team Squads")
     col1, col2 = st.columns(2)
     
@@ -800,8 +825,9 @@ def main():
         st.warning("Unknown page selected. Please check the navigation options.")
 
 def show_scoring():
+    show_second_innings_setup()
     st.title("🏏 Live Scoring")
-
+    
     # Match info header
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -854,7 +880,6 @@ def show_scoring():
 
     # Scoring controls
     scoring_controls()
-    
     # Show modals if needed
     show_new_batter_modal()
     show_new_bowler_modal()
